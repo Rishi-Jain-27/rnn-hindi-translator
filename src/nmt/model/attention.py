@@ -1,12 +1,46 @@
-"""Scaled-dot-product + multi-head attention (MHA/MQA/GQA), masks, KV-cache.
+import torch
+import torch.nn as nn
+from ..config import ModelConfig
 
-Contract (agreed, see plan §4):
-    forward(query, key, value, attn_mask=None, kv_cache=None, layer_id=None)
-        query/key/value: (B, Lq|Lk, d_model)
-        -> (out (B, Lq, d_model), attn (B, n_heads, Lq, Lk))
-attn_mask is a boolean keep-mask (True = keep); the module converts it to an
-additive bias using finfo.min (NOT -inf, for AMP NaN-safety). config.attn_variant
-selects MHA / MQA / GQA (n_kv_heads). Optional Shaw relative positions (rel_pos).
-"""
+class MultiHeadAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.n_heads = config.n_heads
+        self.head_dim = config.head_dim
+        self.scale = self.head_dim ** (-0.5)
+        self.d_model = config.d_model
+        self.W_q = nn.Linear(config.d_model, config.d_model)
+        self.W_k = nn.Linear(config.d_model, config.d_model)
+        self.W_v = nn.Linear(config.d_model, config.d_model)
+        self.W_o = nn.Linear(config.d_model, config.d_model)
+        self.dropout = nn.Dropout(config.attn_dropout)
+    
+    def forward(self, query, key, value, attn_mask=None, kv_cache=None, layer_id=None):
+        q = self.W_q(query)
+        k = self.W_k(key)
+        v = self.W_v(value)
 
-# TODO(rishi): implement
+        # reshape to heads & transpose
+        B, Lq, _ = q.shape
+        q = torch.reshape(q, (B, Lq, self.n_heads, self.head_dim)).transpose(1, 2)
+        
+        B, Lk, _ = k.shape
+        k = torch.reshape(k, (B, Lk, self.n_heads, self.head_dim)).transpose(1, 2)
+        
+        B, Lv, _ = v.shape
+        v = torch.reshape(v, (B, Lv, self.n_heads, self.head_dim)).transpose(1, 2)
+
+        scores = q @ k.transpose(-2, -1) * self.scale
+
+        if attn_mask is not None:
+            scores = scores.masked_fill(~attn_mask, torch.finfo(scores.dtype).min)
+        
+        attn = torch.softmax(scores, dim=-1)
+        attn_dropout = self.dropout(attn)
+
+        context = (attn_dropout @ v).transpose(1, 2).reshape(B, Lq, self.d_model)
+
+        out = self.W_o(context)
+
+        return (out, attn)
+
