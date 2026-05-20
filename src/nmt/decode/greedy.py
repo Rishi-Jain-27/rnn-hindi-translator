@@ -1,0 +1,1 @@
+"""Batched greedy decoding."""

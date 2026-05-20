@@ -1,1 +1,44 @@
+# Local project instructions (not shared)
 CLAUDE.md
+
+# Data & model artifacts (too large / regenerable — keep out of git)
+# NOTE: corpora live on Colab-local disk or a Google Drive mount, never committed here.
+data/
+cache/
+outputs/
+checkpoints/
+*.model
+*.vocab
+*.spm
+*.pt
+*.ckpt
+# tokenized shards / memmaps / staged corpora
+*.npy
+*.npz
+*.bin
+*.arrow
+*.idx
+# raw corpus archives
+*.gz
+*.tgz
+*.zip
+*.tar
+*.bz2
+
+# Experiment logs / profiler traces
+runs/
+wandb/
+*.trace.json
+
+# Virtualenvs
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# OS
+.DS_Store

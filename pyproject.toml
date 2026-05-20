@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nmt"
+version = "0.1.0"
+description = "From-scratch Transformer Hindi->English NMT (encoder-decoder, no pretrained weights)."
+requires-python = ">=3.10"
+dependencies = [
+    "sentencepiece",
+    "sacrebleu",
+    "indic-nlp-library",
+    "sentence-transformers",  # LaBSE data-quality filtering
+    "matplotlib",
+    "scikit-learn",           # t-SNE, probing classifiers
+    "umap-learn",             # UMAP embedding viz
+    "tensorboard",
+]
+# NOTE: torch is intentionally NOT listed. Colab ships a CUDA-matched torch build;
+# letting it provide torch avoids `pip install -e .` clobbering it with a CPU wheel.
+# NOTE: langid (e.g. fasttext/py3langid) and the word-alignment tools (fast_align /
+# eflomal, C++ builds) are installed inside the relevant notebooks, not pinned here.
+
+[tool.setuptools.packages.find]
+where = ["src"]
