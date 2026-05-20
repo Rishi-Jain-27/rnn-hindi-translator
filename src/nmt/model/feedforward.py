@@ -1,9 +1,3 @@
-"""Position-wise feed-forward network: ReLU | GeLU | SwiGLU | GeGLU (config.activation).
-
-Two-layer FFN (d_model -> d_ff -> d_model) with dropout. GLU variants (SwiGLU/GeGLU)
-gate two inner projections; shrink d_ff to ~2/3 for parameter parity if used.
-"""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,12 +6,6 @@ from ..config import ModelConfig
 
 
 class FeedForward(nn.Module):
-    """Position-wise FFN: the same little MLP applied independently to every token position.
-
-    No mixing across the sequence happens here (that is attention's job) — this is just a
-    per-position `(d_model -> wider -> d_model)` transform.
-    """
-
     def __init__(self, config: ModelConfig) -> None:
         super().__init__()
 
@@ -47,7 +35,7 @@ class FeedForward(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """x: (B, T, d_model) -> (B, T, d_model). Applied independently per position."""
+        # x: (B, T, d_model). returns (B, T, d_model).
 
         if self.is_glu:
             # for GLU: up project, gate project, activate, dropout, down project
