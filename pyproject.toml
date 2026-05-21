@@ -9,6 +9,7 @@ description = "From-scratch Transformer Hindi->English NMT (encoder-decoder, no 
 requires-python = ">=3.10"
 dependencies = [
     "sentencepiece",
+    "datasets",               # IITB corpus download (cfilt/iitb-english-hindi)
     "sacrebleu",
     "indic-nlp-library",
     "sentence-transformers",  # LaBSE data-quality filtering
