@@ -123,6 +123,11 @@ class TrainConfig:
     curriculum: bool = False            # short->long curriculum warmup
     seed: int = 1337
 
+    # Observability (tracking.py)
+    tracker: str = "tensorboard"        # none | tensorboard | wandb | both
+    wandb_project: Optional[str] = None
+    log_every: int = 50                 # log train metrics every N optimizer steps
+
 
 @dataclass
 class DecodeConfig:
