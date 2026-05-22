@@ -17,10 +17,11 @@ dependencies = [
     "scikit-learn",           # t-SNE, probing classifiers
     "umap-learn",             # UMAP embedding viz
     "tensorboard",
-    "py3langid",              # langid filtering (pure-Python, NumPy-2 safe; replaced fasttext)
 ]
 # NOTE: torch is intentionally NOT listed. Colab ships a CUDA-matched torch build;
 # letting it provide torch avoids `pip install -e .` clobbering it with a CPU wheel.
+# NOTE: langid is a fast script check (Devanagari vs Latin) in clean.py -- no extra dep
+# (a real langid model over-dropped Hindi; fasttext also broke on NumPy 2).
 # NOTE: the word-alignment tools (fast_align / eflomal, C++ builds) are installed
 # inside the relevant notebooks, not pinned here.
 

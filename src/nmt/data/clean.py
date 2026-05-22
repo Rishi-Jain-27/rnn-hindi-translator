@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import os
+import re
 import unicodedata
 from collections import Counter
 
@@ -45,21 +46,15 @@ def _normalize_en(s: str, cfg: DataConfig) -> str:
 
 # ----------------------------------------------------------------------- langid
 
-_lid_model = None  # cached py3langid module
+_DEVANAGARI = re.compile(r"[ऀ-ॿ]")
+_LATIN = re.compile(r"[A-Za-z]")
 
 
-def _get_lid():
-    # py3langid: pure-Python langid, NumPy-2 safe (fasttext-wheel's predict breaks on Colab's numpy 2.x)
-    global _lid_model
-    if _lid_model is None:
-        import py3langid as langid
-        _lid_model = langid
-    return _lid_model
-
-
-def _detect(model, text: str) -> str:
-    # top-1 language code; py3langid.classify -> (lang, score), newline-free text
-    return model.classify(text.replace("\n", " "))[0]
+def _script_ok(hi: str, en: str) -> bool:
+    # script-based langid for hi(Devanagari)/en(Latin): keep iff the hi side has Devanagari
+    # and the en side has Latin with no Devanagari. fast and reliable for this pair -- a real
+    # langid model (py3langid) mislabels ~30% of Hindi as other Devanagari languages and over-drops.
+    return bool(_DEVANAGARI.search(hi)) and bool(_LATIN.search(en)) and not _DEVANAGARI.search(en)
 
 
 # -------------------------------------------------------------------------- I/O
@@ -123,7 +118,6 @@ def clean(cfg: DataConfig, force: bool = False) -> dict[str, tuple[str, str]]:
         print(f"[clean] train: already cleaned -> {o_hi}, {o_en}")
         return out
 
-    model = _get_lid() if cfg.langid_filter else None
     seen: set[tuple[str, str]] = set()
     kept: list[tuple[str, str]] = []
     stats: Counter = Counter()
@@ -135,7 +129,7 @@ def clean(cfg: DataConfig, force: bool = False) -> dict[str, tuple[str, str]]:
         if not h or not e:
             stats["empty"] += 1
             continue
-        if model is not None and (_detect(model, h) != "hi" or _detect(model, e) != "en"):
+        if cfg.langid_filter and not _script_ok(h, e):
             stats["langid"] += 1
             continue
         if not _ratio_ok(h, e, cfg.max_len_ratio):
