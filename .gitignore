@@ -3,10 +3,11 @@ CLAUDE.md
 
 # Data & model artifacts (too large / regenerable — keep out of git)
 # NOTE: corpora live on Colab-local disk or a Google Drive mount, never committed here.
-data/
-cache/
-outputs/
-checkpoints/
+# Leading slash = repo-root ONLY, so the source package src/nmt/data/ is NOT ignored.
+/data/
+/cache/
+/outputs/
+/checkpoints/
 *.model
 *.vocab
 *.spm
@@ -26,8 +27,8 @@ checkpoints/
 *.bz2
 
 # Experiment logs / profiler traces
-runs/
-wandb/
+/runs/
+/wandb/
 *.trace.json
 
 # Virtualenvs
