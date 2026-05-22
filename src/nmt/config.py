@@ -113,6 +113,8 @@ class TrainConfig:
     # Weight averaging
     ema_decay: Optional[float] = 0.999   # None disables EMA
     use_swa: bool = False
+    swa_start: int = 80_000              # step to begin collecting SWA snapshots
+    swa_period: int = 1000               # collect an SWA snapshot every N steps once started
     ckpt_avg_last_n: int = 5             # average last N checkpoints at the end
 
     # Cadence
