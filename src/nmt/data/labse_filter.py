@@ -25,8 +25,8 @@ def _get_labse(device: str | None = None):
     return _labse_model
 
 
-def labse_filter(cfg: DataConfig, force: bool = False,
-                 device: str | None = None, batch: int | None = None) -> dict[str, tuple[str, str]]:
+def labse_filter(cfg: DataConfig, force: bool = False, device: str | None = None,
+                 batch: int | None = None, chunk: int = 50_000) -> dict[str, tuple[str, str]]:
     # Filter cleaned train pairs by LaBSE cosine; return {split: (hi_path, en_path)}.
 
     # Reads train.clean.* (from clean.py), writes train.labse.*; dev/test pass through as their cleaned paths.
@@ -51,26 +51,28 @@ def labse_filter(cfg: DataConfig, force: bool = False,
 
     pairs = _read_pairs(in_hi, in_en)
     model = _get_labse(device)
+    from tqdm.auto import tqdm  # progress bar (tqdm ships with sentence-transformers)
 
     kept: list[tuple[str, str]] = []
     sim_sum = 0.0
-    for i in range(0, len(pairs), batch):
-        chunk = pairs[i:i + batch]
-        his = [h for h, _ in chunk]
-        ens = [e for _, e in chunk]
-        # normalize_embeddings=True -> cosine similarity is just the row-wise dot product.
-        he = model.encode(his, convert_to_tensor=True, normalize_embeddings=True,
-                          batch_size=batch, show_progress_bar=False)
-        ee = model.encode(ens, convert_to_tensor=True, normalize_embeddings=True,
-                          batch_size=batch, show_progress_bar=False)
-        sims = (he * ee).sum(dim=1)                      # (len(chunk),) cosine per pair
-        for (h, e), s in zip(chunk, sims.tolist()):
-            sim_sum += s
-            if s >= cfg.labse_threshold:
-                kept.append((h, e))
+    n = len(pairs)
+    # process in big slices: encode each side once per slice (sentence-transformers batches
+    # internally at batch_size), then score the slice in one vectorized numpy op. avoids the
+    # per-256 GPU->CPU sync of the old loop; tqdm shows progress; memory bounded by `chunk`.
+    for i in tqdm(range(0, n, chunk), desc="[labse] encoding", unit="slice"):
+        sub = pairs[i:i + chunk]
+        his = [h for h, _ in sub]
+        ens = [e for _, e in sub]
+        # normalize_embeddings=True -> cosine similarity is the row-wise dot product.
+        he = model.encode(his, batch_size=batch, normalize_embeddings=True,
+                          convert_to_numpy=True, show_progress_bar=False)
+        ee = model.encode(ens, batch_size=batch, normalize_embeddings=True,
+                          convert_to_numpy=True, show_progress_bar=False)
+        sims = (he * ee).sum(axis=1)                     # (len(sub),) cosine per pair
+        sim_sum += float(sims.sum())
+        kept.extend(p for p, keep in zip(sub, sims >= cfg.labse_threshold) if keep)
 
     _write_pairs(kept, o_hi, o_en)
-    n = len(pairs)
     mean = sim_sum / n if n else 0.0
     print(f"[labse] train: kept {len(kept)}/{n} (thr={cfg.labse_threshold}, mean_sim={mean:.3f}) "
           f"-> {o_hi}, {o_en}")
