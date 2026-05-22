@@ -45,21 +45,21 @@ def _normalize_en(s: str, cfg: DataConfig) -> str:
 
 # ----------------------------------------------------------------------- langid
 
-_lid_model = None  # cached fastText lid.176 model
+_lid_model = None  # cached py3langid module
 
 
-def _get_lid(lid_path: str):
+def _get_lid():
+    # py3langid: pure-Python langid, NumPy-2 safe (fasttext-wheel's predict breaks on Colab's numpy 2.x)
     global _lid_model
     if _lid_model is None:
-        import fasttext  # lazy: installed in the notebook, not pinned in pyproject
-        _lid_model = fasttext.load_model(lid_path)
+        import py3langid as langid
+        _lid_model = langid
     return _lid_model
 
 
 def _detect(model, text: str) -> str:
-    # Top-1 language code; fastText labels look like '__label__en' and need newline-free text.
-    label = model.predict(text.replace("\n", " "), k=1)[0][0]
-    return label.replace("__label__", "")
+    # top-1 language code; py3langid.classify -> (lang, score), newline-free text
+    return model.classify(text.replace("\n", " "))[0]
 
 
 # -------------------------------------------------------------------------- I/O
@@ -89,7 +89,7 @@ def _ratio_ok(hi: str, en: str, max_ratio: float) -> bool:
 
 # ------------------------------------------------------------------ orchestrator
 
-def clean(cfg: DataConfig, force: bool = False, lid_path: str = "lid.176.bin") -> dict[str, tuple[str, str]]:
+def clean(cfg: DataConfig, force: bool = False) -> dict[str, tuple[str, str]]:
     # Normalize+filter the corpus. Returns {split: (hi_path, en_path)} of cleaned files.
     os.makedirs(cfg.cache_dir, exist_ok=True)
     out: dict[str, tuple[str, str]] = {}
@@ -123,7 +123,7 @@ def clean(cfg: DataConfig, force: bool = False, lid_path: str = "lid.176.bin") -
         print(f"[clean] train: already cleaned -> {o_hi}, {o_en}")
         return out
 
-    model = _get_lid(lid_path) if cfg.langid_filter else None
+    model = _get_lid() if cfg.langid_filter else None
     seen: set[tuple[str, str]] = set()
     kept: list[tuple[str, str]] = []
     stats: Counter = Counter()
