@@ -76,7 +76,9 @@ def train_tokenizer(cfg: DataConfig, train_hi: str, train_en: str,
         print(f"[tokenizer] already trained -> {model_file}")
         return Tokenizer.load(model_file)
 
-    spm.SentencePieceTrainer.train(
+    # spm exposes Train (camelcase) statically; the .train snake_case alias is added at runtime,
+    # so type-checkers flag it as unknown -- runtime is fine (already trained the model on colab)
+    spm.SentencePieceTrainer.train(  # type: ignore[attr-defined]
         input=f"{train_hi},{train_en}",         # comma-separated -> one joint vocab over hi+en
         model_prefix=prefix,
         model_type=cfg.tokenizer_model,         # unigram (default) | bpe
