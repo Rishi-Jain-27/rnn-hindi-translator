@@ -8,6 +8,7 @@
 #   - a tiny real Transformer: determinism + row independence on the real decode path
 
 import pytest
+from types import SimpleNamespace
 
 torch = pytest.importorskip("torch")  # skip on the Mac; runs on Colab
 
@@ -19,27 +20,29 @@ from nmt.decode.greedy import greedy_decode
 # ---- scripted fake model: drives the argmax, row by row, step by step ----
 
 class ScriptedModel(torch.nn.Module):
-    # fake encoder-decoder: row b's chosen next token at step s is schedule[b][s].
-    # greedy only reads the last position's argmax, so we set that one logit high.
-    # self.calls counts decoder calls = number of loop iterations (for the early-stop test).
-    def __init__(self, schedule, vocab_size):
+    # fake model for the cached decode path: row b's chosen next token at step s is
+    # schedule[b][s]. greedy reads the last position's argmax, so we set that one logit high.
+    # self.calls counts decode_step calls = number of decode steps (for the early-stop test).
+    # decoder.layers just needs a length -- greedy sizes the cache from it; we ignore the cache.
+    def __init__(self, schedule, vocab_size, n_layers=2):
         super().__init__()
         self.p = torch.nn.Parameter(torch.zeros(1))   # one param -> model has a .device
         self.schedule = schedule                       # B lists of ids, one entry per step
         self.vocab_size = vocab_size
+        self.decoder = SimpleNamespace(layers=[0] * n_layers)  # len() -> cache size
         self.calls = 0
 
     def encoder(self, src, src_pad_mask):
         B, S = src.shape
         return torch.zeros(B, S, 1)                     # memory; greedy just passes it through
 
-    def decoder(self, decoder_input, memory, tgt_pad_mask, src_pad_mask):
+    def decode_step(self, token, memory, src_pad_mask, kv_cache):
+        step = self.calls
         self.calls += 1
-        B, t = decoder_input.shape
-        step = t - 1                                    # seed length 1 -> step 0
-        logits = torch.zeros(B, t, self.vocab_size)
+        B = token.shape[0]
+        logits = torch.zeros(B, 1, self.vocab_size)     # one position
         for b in range(B):
-            logits[b, -1, self.schedule[b][step]] = 1.0  # argmax at last pos -> scripted id
+            logits[b, 0, self.schedule[b][step]] = 1.0  # argmax -> scripted id for this step
         return logits
 
 

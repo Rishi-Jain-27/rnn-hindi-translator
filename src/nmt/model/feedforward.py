@@ -40,7 +40,7 @@ class FeedForward(nn.Module):
         if self.is_glu:
             # for GLU: up project, gate project, activate, dropout, down project
             a = self.up_projection(x)
-            g = self.gate_projection(x)
+            g = self.gate_projection(x) # type: ignore
             h = self.act(g) * a
             h = self.dropout(h)
             return self.down_projection(h)

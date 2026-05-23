@@ -1,7 +1,15 @@
-"""KV-cache container shared by greedy + beam decoding.
+# kv-cache for incremental (decode-only) attention.
+# first pass = self-attention only (cross-attn recomputes from memory each step).
+#
+# the cache is a flat list with one slot per decoder layer:
+#   None     -> nothing stored yet (first decode step)
+#   (k, v)   -> that layer's grown self keys/values, each (B, n_heads, t, head_dim)
+# attention reads/appends its slot by layer_id; the decoder reads a slot's time length
+# as the position offset. greedy/beam allocate one with new_cache and loop decode_step.
+#
+# deferred (lands with beam / cross-attn caching): a richer container with
+# reorder(beam_index) for beam pruning + a separately cached cross-attn k/v.
 
-Contract (agreed, see plan §4): alloc / append(layer_id, k, v) / reorder(beam_index) /
-reset / current_len. Self-attention K/V grow one step at a time; cross-attention K/V are
-computed once from the encoder memory and cached separately. The decoder layers (model/)
-fill it; greedy/beam (decode/) drive it. Gated by tests/test_kv_cache.py (incremental
-decode logits must match a full-sequence forward to ~1e-4)."""
+def new_cache(n_layers):
+    # one empty (None) slot per decoder layer; caller passes len(model.decoder.layers)
+    return [None] * n_layers

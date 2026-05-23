@@ -1,10 +1,6 @@
 # Batched greedy decoding.
-'''
-encode the source once, then loop to grow output one token at a time,
-build prefix, run decoder, take the last position's logits, argmax, append, stop at eos
-'''
-
 from ..config import ModelConfig
+from .cache import new_cache
 import torch
 
 def greedy_decode(model, src, max_len, cfg):
@@ -21,15 +17,18 @@ def greedy_decode(model, src, max_len, cfg):
         # 2. Encode the source once
         memory = model.encoder(src, src_pad_mask)
 
+        # Create new cache
+        kv_cache = new_cache(len(model.decoder.layers))
+
         # Seed the target with BOS (beginning of sentence) for every sentence in the batch (B,1) tensor
-        decoder_input = torch.full((B, 1), cfg.bos_id, device=device)
+        input = torch.full((B, 1), cfg.bos_id, device=device)
         predicted_ids = []
         finished = torch.zeros(B, dtype=torch.bool, device=device)
 
         # 3. repeat until max length
         for t in range(max_len):
             # Run the decoder
-            logits = model.decoder(decoder_input, memory, decoder_input != cfg.pad_id, src_pad_mask)
+            logits = model.decode_step(input, memory, src_pad_mask, kv_cache)
             
             # argmax
             id = torch.argmax(logits[:, -1, :], dim=-1)
@@ -40,7 +39,9 @@ def greedy_decode(model, src, max_len, cfg):
             # add to predicted_ids
             predicted_ids.append(finish)
             finished = finished | (id == cfg.eos_id)
-            decoder_input = torch.cat((decoder_input, finish.reshape(B, 1)), dim=1) # dim=1 is time axis, so we add more across time!
+
+            # update input
+            input = finish.unsqueeze(dim=1)
 
             # check for EOS
             if finished.all():

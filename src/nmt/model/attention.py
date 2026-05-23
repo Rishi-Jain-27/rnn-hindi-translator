@@ -30,6 +30,19 @@ class MultiHeadAttention(nn.Module):
         B, Lv, _ = v.shape
         v = torch.reshape(v, (B, Lv, self.n_heads, self.head_dim)).transpose(1, 2)
 
+        # Determine whether to update kv cache or not
+        if kv_cache is not None:
+            # if the slot is empty, add to it
+            if kv_cache[layer_id] is None:
+                kv_cache[layer_id] = (k, v)
+            else:
+                # pull stored self keys and values
+                layer_k, layer_v = kv_cache[layer_id]
+
+                # concat along positions
+                kv_cache[layer_id] = (torch.cat((layer_k, k), dim=2), torch.cat((layer_v, v), dim=2))
+                k, v = kv_cache[layer_id]
+        
         scores = q @ k.transpose(-2, -1) * self.scale
 
         if attn_mask is not None:

@@ -7,6 +7,8 @@ from ..config import ModelConfig
 import math
 
 class SinusoidalPositionalEncoding(nn.Module):
+    pe: torch.Tensor  # declared for type-checkers; register_buffer creates it at runtime
+
     def __init__(self, d_model, max_len):
         super().__init__()
         # Column of positions 0...max_len - 1
@@ -28,23 +30,23 @@ class SinusoidalPositionalEncoding(nn.Module):
         self.register_buffer("pe", pe)  
 
 
-    def forward(self, x):
+    def forward(self, x, offset=0):
         # current seq len
         T = x.size(1)
         # clear error if too long
-        assert T <= self.pe.size(0), f"seq len {T} > max_len {self.pe.size(0)}"
-        return x + self.pe[:T] 
+        assert (offset + T) <= self.pe.size(0), f"seq len {T} > max_len {self.pe.size(0)}"
+        return x + self.pe[offset:T + offset] 
 
 class LearnedPositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len):
         super().__init__()
         self.pos_embed = nn.Embedding(max_len, d_model)
     
-    def forward(self, x):
+    def forward(self, x, offset=0):
         # clear error if too long
         T = x.size(1)
-        assert T <= self.pos_embed.num_embeddings, f"seq len {T} > max_len {self.pos_embed.num_embeddings}"
-        positions = torch.arange(T, device=x.device, dtype=torch.long)
+        assert (T + offset) <= self.pos_embed.num_embeddings, f"seq len {T} > max_len {self.pos_embed.num_embeddings}"
+        positions = torch.arange(start=offset, end=T + offset, device=x.device, dtype=torch.long)
         x = self.pos_embed(positions) + x
         return x
 
