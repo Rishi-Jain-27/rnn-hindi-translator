@@ -55,8 +55,20 @@ class RecordingGreedy:
         return out
 
 
-def _cfg(batch_size=2, max_decode_len=16):
-    return DecodeConfig(batch_size=batch_size, max_decode_len=max_decode_len)
+# stand-in for beam_search: per-sentence (model, tokenizer, src (1,S), cfg) -> one id list.
+# records each call's src shape and echoes the single row back (pad + eos stripped).
+class RecordingBeam:
+    def __init__(self):
+        self.shapes = []
+
+    def __call__(self, model, tokenizer, src, cfg):
+        self.shapes.append(tuple(src.shape))
+        row = src.tolist()[0]
+        return [t for t in row if t != tokenizer.pad_id and t != tokenizer.eos_id]
+
+
+def _cfg(batch_size=2, max_decode_len=16, mode="greedy"):
+    return DecodeConfig(mode=mode, batch_size=batch_size, max_decode_len=max_decode_len)
 
 
 def test_round_trip_preserves_order(monkeypatch):
@@ -100,6 +112,17 @@ def test_encode_uses_eos_not_bos(monkeypatch):
     tok = FakeTokenizer()
     T.translate(FakeModel(), ["5 6", "7"], tok, _cfg(batch_size=8))
     assert tok.encode_flags == [(False, True), (False, True)]
+
+
+def test_beam_mode_calls_beam_per_sentence(monkeypatch):
+    # mode="beam" routes to beam_search, one sentence at a time as (1, S) (no batch padding)
+    rec = RecordingBeam()
+    monkeypatch.setattr(T, "beam_search", rec)
+    tok = FakeTokenizer()
+    sentences = ["5 6 7", "8", "9 10 11 12"]
+    out = T.translate(FakeModel(), sentences, tok, _cfg(batch_size=2, mode="beam"))
+    assert out == sentences                                  # round-trips input order
+    assert rec.shapes == [(1, 4), (1, 2), (1, 5)]            # each its own (1, len+eos), no padding
 
 
 def test_empty_input_returns_empty(monkeypatch):
