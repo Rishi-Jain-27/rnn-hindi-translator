@@ -1,5 +1,5 @@
 '''
-Beam search: length & coverage penalties, diverse beam, n-best.
+Beam search
 - keep the k best partial hypotheses alive at all times (beam_size, default 5)
 - extend each live beam by each possible token
 - score them all, keep the global top k
@@ -9,6 +9,8 @@ Beam search: length & coverage penalties, diverse beam, n-best.
 - survivor carries parent beam and what token it added
 - Recover both from the flat index (parent = index / V, token = index mod V)
 - Need parent index to rebuild the full sequence and for KV cache
+
+For the future: coverage penalty, diverse beam search, early eos suppression, no-repeat n-gram blocking, repetition penalty, tighter early-stop
 '''
 
 from ..config import ModelConfig
@@ -89,7 +91,7 @@ def beam_search(model, tokenizer, src, cfg):
             # Update token_sequences
             new = []
             for j, _ in enumerate(live_parents):
-                new.append(token_sequences[live_parents[j]] + [live_tokens[j]])
+                new.append(token_sequences[live_parents[j]] + [live_tokens[j].item()])
             token_sequences = new
             
             # reorder cache
@@ -105,12 +107,33 @@ def beam_search(model, tokenizer, src, cfg):
             # check if finished
             if len(finished) >= cfg.beam_size:
                 break
-        return finished
-
-
-
-
-
-
         
+        # Choose which pool to rank
+        if len(finished) > 0:
+            # if finished has anything in it, that's the pool
+            pool = [(seq, sco.item()) for (seq, sco) in finished]
+        else:
+            # else, it's the live beams found from token_sequences and running_scores
+            pool = [(token_sequences[i], running_scores[i].item()) for i in range(len(running_scores))]
+        
+        # Apply length penalty to each candidate score
+        length_penalty_pool = []
+        a = cfg.length_penalty
+        for i, (sequence, score) in enumerate(pool):
+            L = len(sequence)
+            penalized_score = score / ((5 + L) / 6) ** a
+            length_penalty_pool.append((sequence, penalized_score))
+
+        # Choose the candidate with the highest penalized score
+        # Scores are negative, so the best is closest to zero (the max)
+        best_sequence_idx = 0
+        best_score = float("-inf")
+        for i, (_, penal_score) in enumerate(length_penalty_pool):
+            if penal_score > best_score:
+                best_score = penal_score
+                best_sequence_idx = i
+        # get the sequence of the best scoring candidate
+        best_sequence = length_penalty_pool[best_sequence_idx][0]
+
+        return best_sequence
 

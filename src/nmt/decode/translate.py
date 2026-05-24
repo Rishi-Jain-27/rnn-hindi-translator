@@ -6,6 +6,7 @@
 
 import torch
 from .greedy import greedy_decode
+from .beam import beam_search
 
 # translate in batches of cfg.batch_size
 def translate(model, sentences, tokenizer, cfg):
@@ -31,6 +32,20 @@ def translate(model, sentences, tokenizer, cfg):
 
 # small, per-batch helper
 def _translate(model, batch_sentences, tokenizer, cfg):
+    # beam mode: beam_search runs one sentence at a time (takes (1,S), returns one id list)
+    if cfg.mode == "beam":
+        device = next(model.parameters()).device
+        out = []
+        for string in batch_sentences:
+            ids = tokenizer.encode(string, add_bos=False, add_eos=True)   # src + eos (train parity)
+            src = torch.tensor([ids], device=device)                      # (1, S), no padding needed
+            out.append(tokenizer.decode(beam_search(model, tokenizer, src, cfg)))
+        return out
+
+    # only greedy is wired for the batched path below; mbr/ensemble not implemented yet
+    if cfg.mode != "greedy":
+        raise NotImplementedError(f"decode mode {cfg.mode!r} not supported (greedy|beam)")
+
     # 1. Encode each source sentence to ids with end marker and no begin marker
 
     # loop input strings, call tokenizer.encode on each with add_eos=True and add_bos=False
