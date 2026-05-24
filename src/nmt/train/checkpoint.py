@@ -72,9 +72,10 @@ class CheckpointManager():
 
     # exact inverse of gather rng
     def _restore_rng(self, d):
-        torch.set_rng_state(d["torch"])
+        # map_location may have moved these onto the gpu; the rng setters need cpu bytetensors
+        torch.set_rng_state(d["torch"].cpu())
         if torch.cuda.is_available() and d["cuda"] is not None:
-            torch.cuda.set_rng_state_all(d["cuda"])
+            torch.cuda.set_rng_state_all([s.cpu() for s in d["cuda"]])
         numpy.random.set_state(d["numpy"])
         random.setstate(d["python"])
 
