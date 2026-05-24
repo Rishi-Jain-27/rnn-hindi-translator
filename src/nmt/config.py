@@ -120,7 +120,7 @@ class TrainConfig:
     # Cadence
     eval_every: int = 2000
     ckpt_every: int = 2000
-    ckpt_keep_last_n: int = 5           # rotation: keep last N step_*.pt (best.pt always kept)
+    ckpt_keep_last_n: int = 3           # rotation: keep last N step_*.pt (best.pt always kept)
     patience: int = 10                  # early stop after N evals without improvement
     curriculum: bool = False            # short->long curriculum warmup
     seed: int = 1337
