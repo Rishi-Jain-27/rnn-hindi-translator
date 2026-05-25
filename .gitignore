@@ -12,6 +12,7 @@ CLAUDE.md
 *.vocab
 *.spm
 *.pt
+*.pth
 *.ckpt
 # tokenized shards / memmaps / staged corpora
 *.npy
