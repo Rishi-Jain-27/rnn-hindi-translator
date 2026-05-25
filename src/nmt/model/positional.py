@@ -50,9 +50,16 @@ class LearnedPositionalEncoding(nn.Module):
         x = self.pos_embed(positions) + x
         return x
 
+class ThrowAwayPosEncoding(nn.Module):
+    def __init__(self, d_model, max_len):
+        super().__init__()
+    
+    def forward(self, x, offset=0):
+        return x # ignore offset
 
+# Rope is done in attention.py, so we don't redo it here
 def make_positional(config):
     return {"sinusoidal": SinusoidalPositionalEncoding,
             "learned": LearnedPositionalEncoding,
-            "rope": nn.Identity,
+            "rope": ThrowAwayPosEncoding,
             "alibi": nn.Identity}[config.pos_encoding](config.d_model, config.max_len)

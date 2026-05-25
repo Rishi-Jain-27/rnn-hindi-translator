@@ -14,6 +14,7 @@ class MultiHeadAttention(nn.Module):
         self.W_v = nn.Linear(config.d_model, config.d_model)
         self.W_o = nn.Linear(config.d_model, config.d_model)
         self.dropout = nn.Dropout(config.attn_dropout)
+        self.cfg = config
     
     def forward(self, query, key, value, attn_mask=None, kv_cache=None, layer_id=None):
         q = self.W_q(query)
@@ -30,6 +31,9 @@ class MultiHeadAttention(nn.Module):
         B, Lv, _ = v.shape
         v = torch.reshape(v, (B, Lv, self.n_heads, self.head_dim)).transpose(1, 2)
 
+        # RoPE!
+        
+
         # Determine whether to update kv cache or not
         if kv_cache is not None:
             # if the slot is empty, add to it
@@ -42,7 +46,7 @@ class MultiHeadAttention(nn.Module):
                 # concat along positions
                 kv_cache[layer_id] = (torch.cat((layer_k, k), dim=2), torch.cat((layer_v, v), dim=2))
                 k, v = kv_cache[layer_id]
-        
+
         scores = q @ k.transpose(-2, -1) * self.scale
 
         if attn_mask is not None:
