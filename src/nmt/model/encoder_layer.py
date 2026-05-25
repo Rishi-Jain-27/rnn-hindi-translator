@@ -7,7 +7,7 @@ import torch.nn as nn
 class EncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self_attn = MultiHeadAttention(config)
+        self.self_attn = MultiHeadAttention(config, is_self_attn=True)
         self.attn_norm = ResidualNorm(config, config.d_model)
 
         self.ffn = FeedForward(config)

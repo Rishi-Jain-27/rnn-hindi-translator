@@ -7,10 +7,10 @@ import torch.nn as nn
 class DecoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self_attn = MultiHeadAttention(config)
+        self.self_attn = MultiHeadAttention(config, is_self_attn=True)
         self.self_attn_norm = ResidualNorm(config, config.d_model)
 
-        self.cross_attn = MultiHeadAttention(config)
+        self.cross_attn = MultiHeadAttention(config, is_self_attn=False)
         self.cross_attn_norm = ResidualNorm(config, config.d_model)
 
         self.ffn = FeedForward(config)

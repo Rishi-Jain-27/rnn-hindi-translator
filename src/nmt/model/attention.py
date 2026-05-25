@@ -3,7 +3,7 @@ import torch.nn as nn
 from ..config import ModelConfig
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, is_self_attn=True):
         super().__init__()
         self.n_heads = config.n_heads
         self.head_dim = config.head_dim
@@ -15,6 +15,7 @@ class MultiHeadAttention(nn.Module):
         self.W_o = nn.Linear(config.d_model, config.d_model)
         self.dropout = nn.Dropout(config.attn_dropout)
         self.cfg = config
+        self.rope = is_self_attn and config.pos_encoding == "rope"
     
     def forward(self, query, key, value, attn_mask=None, kv_cache=None, layer_id=None):
         q = self.W_q(query)
@@ -32,7 +33,7 @@ class MultiHeadAttention(nn.Module):
         v = torch.reshape(v, (B, Lv, self.n_heads, self.head_dim)).transpose(1, 2)
 
         # RoPE!
-        
+
 
         # Determine whether to update kv cache or not
         if kv_cache is not None:
