@@ -21,6 +21,9 @@ import torch.nn.functional
 def beam_search(model, tokenizer, src, cfg):
     device = next(model.parameters()).device
     V = tokenizer.vocab_size
+    B = cfg.coverage_penalty
+    a = cfg.length_penalty
+    return_attn = B > 0
 
     # 1. Setup
     model.eval()
@@ -49,12 +52,26 @@ def beam_search(model, tokenizer, src, cfg):
 
         # Create finished
         finished = []
+
+        # Create per-beam coverage running-sum
+        if return_attn: coverage_running_sum = torch.zeros((cfg.beam_size, src.shape[1]), device=device)
         
         # 2. Loop
         for t in range(cfg.max_decode_len):
-            # decode into logits
-            logits = model.decode_step(input, memory, src_pad_mask, kv_cache)
+            # decode into logits (and attn)
+            if return_attn:
+                logits, attn = model.decode_step(input, memory, src_pad_mask, kv_cache, return_attn)
 
+                # reduce attn down from (beam_size, heads, 1, source_len) to (beam_size, source_len)
+                attn = torch.mean(attn, dim=1)
+                attn = attn.squeeze(dim=1)
+                
+                # Add attn to the accumulator
+                coverage_running_sum += attn
+
+            else:
+                logits = model.decode_step(input, memory, src_pad_mask, kv_cache, return_attn)
+            
             # create log probs over V
             log_probs = torch.nn.functional.log_softmax(logits[:, -1, :], dim=-1)
 
@@ -80,7 +97,10 @@ def beam_search(model, tokenizer, src, cfg):
             for i, token in enumerate(tokens):
                 # if token is EOS, add to hypothesis
                 if token == tokenizer.eos_id:
-                    finished.append((token_sequences[parents[i]], cumulative_scores[i]))
+                    if return_attn:
+                        finished.append((token_sequences[parents[i]], cumulative_scores[i], torch.clone(coverage_running_sum[parents[i]])))
+                    else:
+                        finished.append((token_sequences[parents[i]], cumulative_scores[i]))
                 else:
                     live_parents.append(parents[i])
                     live_tokens.append(tokens[i])
@@ -94,9 +114,10 @@ def beam_search(model, tokenizer, src, cfg):
                 new.append(token_sequences[live_parents[j]] + [live_tokens[j].item()])
             token_sequences = new
             
-            # reorder cache
+            # reorder cache (and coverage running sum)
             kv_cache = reorder_cache(kv_cache=kv_cache,
                                      beam_index=torch.tensor(live_parents, dtype=torch.long, device=device))
+            if return_attn: coverage_running_sum = coverage_running_sum[live_parents]
             
             # build next (k, 1) token tensor from live beams' tokens
             input = torch.tensor(live_tokens, dtype=torch.long, device=device).unsqueeze(dim=1)
@@ -111,29 +132,50 @@ def beam_search(model, tokenizer, src, cfg):
         # Choose which pool to rank
         if len(finished) > 0:
             # if finished has anything in it, that's the pool
-            pool = [(seq, sco.item()) for (seq, sco) in finished]
+            if return_attn:
+                pool = [(seq, sco.item(), cov) for (seq, sco, cov) in finished]
+            else:
+                pool = [(seq, sco.item(), None) for (seq, sco) in finished]
         else:
             # else, it's the live beams found from token_sequences and running_scores
-            pool = [(token_sequences[i], running_scores[i].item()) for i in range(len(running_scores))]
+            if return_attn:
+                pool = [(token_sequences[i], running_scores[i].item(), coverage_running_sum[i]) for i in range(len(running_scores))]
+            else:
+                pool = [(token_sequences[i], running_scores[i].item(), None) for i in range(len(running_scores))]
         
-        # Apply length penalty to each candidate score
-        length_penalty_pool = []
-        a = cfg.length_penalty
-        for i, (sequence, score) in enumerate(pool):
-            L = len(sequence)
-            penalized_score = score / ((5 + L) / 6) ** a
-            length_penalty_pool.append((sequence, penalized_score))
+        # Apply length and coverage penalty to each candidate score in the pool
+        penalty_pool = []
+        best_sequence_idx = 0
+        best_score = float("-inf")
+        for i, (sequence, length_score, coverage_score) in enumerate(pool):
+            L = len(sequence) # check
+            penalized_score = (length_score / ((5 + L) / 6) ** a)
+            if coverage_score is not None:
+                # coverage_score is shape (S,) being source_len because
+                # coverage_score at i removes the beam_size shape
+
+                '''
+                Math explanation:
+                - Get min between score and 1
+                - Take the log
+                - Sum
+                - Multiply by cfg.coverage_penalty (B)
+                - Gives a scalar, take .item()
+                # It gives scalar because coverage_score is a tensor of shape (S,)
+                # and the resulting operations do not expand the shape of coverage_score
+                '''
+                penalized_score += (B * torch.sum(torch.log(torch.minimum(coverage_score, torch.tensor(1.0, device=device))), dim=0)).item()
+            
+            penalty_pool.append((sequence, penalized_score))
 
         # Choose the candidate with the highest penalized score
         # Scores are negative, so the best is closest to zero (the max)
-        best_sequence_idx = 0
-        best_score = float("-inf")
-        for i, (_, penal_score) in enumerate(length_penalty_pool):
+        for i, (_, penal_score) in enumerate(penalty_pool):
             if penal_score > best_score:
                 best_score = penal_score
                 best_sequence_idx = i
         # get the sequence of the best scoring candidate
-        best_sequence = length_penalty_pool[best_sequence_idx][0]
+        best_sequence = penalty_pool[best_sequence_idx][0]
 
         return best_sequence
 

@@ -33,10 +33,10 @@ class Transformer(nn.Module):
         return self.encoder(src_ids, src_pad_mask)
 
     # decode step is for evaluation, kv cache is solely for eval
-    def decode_step(self, token, memory, src_pad_mask, kv_cache):
+    def decode_step(self, token, memory, src_pad_mask, kv_cache, return_attn=False):
         device = token.device
         B = token.shape[0]
-        return self.decoder(token, memory, torch.full((B, 1), fill_value=True, device=device), src_pad_mask, kv_cache)
+        return self.decoder(token, memory, torch.full((B, 1), fill_value=True, device=device), src_pad_mask, kv_cache, return_attn)
 
 def build_model(config, tokenizer):
     config.vocab_size = tokenizer.vocab_size
