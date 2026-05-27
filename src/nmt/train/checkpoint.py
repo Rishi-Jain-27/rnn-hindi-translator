@@ -75,7 +75,7 @@ class CheckpointManager():
         # map_location may have moved these onto the gpu; the rng setters need cpu bytetensors
         torch.set_rng_state(d["torch"].cpu())
         if torch.cuda.is_available() and d["cuda"] is not None:
-            torch.cuda.set_rng_state_all([s.cpu() for s in d["cuda"]])
+            torch.cuda.set_rng_state_all([s.cpu() for s in d["cuda"][:torch.cuda.device_count()]])
         numpy.random.set_state(d["numpy"])
         random.setstate(d["python"])
 
@@ -107,8 +107,8 @@ class CheckpointManager():
         return out
 
 def average_checkpoints(paths, key="model", map_location="cpu") -> dict:
-    acc = None # acc for accumulator
     n = len(paths) # num ckpts we are averaging
+    acc = {}
 
     for i, path in enumerate(paths): # walk the ckpts in order
         # load one
@@ -118,7 +118,6 @@ def average_checkpoints(paths, key="model", map_location="cpu") -> dict:
 
         # first checkpoint seeds the accumulator
         if i == 0:
-            acc = {}
             for k, v in sd.items():
                 acc[k] = v.clone().float() if v.is_floating_point() else v.clone()
         else:
